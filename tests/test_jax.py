@@ -48,3 +48,18 @@ def test_argtype():
     cl_theta = cross(nu, nu, ell, theta)
 
     assert jnp.all(jnp.isclose(cl_alpha, cl_theta))
+
+
+def test_grad():
+    ell = jnp.arange(2, 5000)
+    nu = jnp.linspace(80.0, 220.0, 100)
+
+    cl = fgp.PowerLaw(ell_0=500)
+    sed = fgf.ConstantSED()
+    cross = fgc.FactorizedCrossSpectrum(sed=sed, cl=cl)
+
+    g_spec = jax.jit(jax.jacfwd(cross, argnums=3))
+
+    params = {"amp": 1.0, "alpha": -0.6}
+    theta = jnp.array([params[p] for p in cross.parameters])
+    g_theta = g_spec(nu, nu, ell, theta)

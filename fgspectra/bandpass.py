@@ -38,6 +38,8 @@ class Bandpass(Model):
         self.local_parameters = self.sed.local_parameters
 
     def __call__(self, nus, bps, theta=None, /, *, lib=None, **params):
+        # This function needs to do a couple of things manually because
+        # it needs to do things differently most of the time.
         is_single = not isinstance(nus, (list, tuple))
         nus = [nus] if is_single else list(nus)
         bps = [bps] if is_single else list(bps)
@@ -53,7 +55,7 @@ class Bandpass(Model):
             lib = self.backend(*pars)
 
         params = self.get_params(lib, theta, params)
-        params = self._expand_params(lib, params, self.n_axes)
+        params = self.expand_parameters(lib, params, self.n_axes)
         out = [
             self.eval(lib.asarray(nu), lib.asarray(bp), lib=lib, **params)
             for nu, bp in zip(nus, bps)

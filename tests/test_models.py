@@ -169,7 +169,7 @@ def test_dust_numpy():
     params = {"amp": np.linspace(0.5, 1.5, 10), "beta": np.linspace(1.3, 2.7, 10)}
 
     dust = fgc.FactorizedCrossSpectrum(
-        fgf.ModifiedBlackBody(T=19.6), fgp.DustCl(alpha=-0.6)
+        fgf.ModifiedBlackBody(T=19.6), fgp.DustPowerLaw(alpha=-0.6)
     )
 
     assert dust.cl.ell_0 == 500
@@ -188,7 +188,7 @@ def test_dust_jax():
 
     dust = fgc.FactorizedCrossSpectrum(
         fgf.ModifiedBlackBody(constants={"T": 19.6}),
-        fgp.DustCl(constants={"alpha": -0.6}),
+        fgp.DustPowerLaw(constants={"alpha": -0.6}),
     )
 
     assert dust.cl.ell_0 == 500
