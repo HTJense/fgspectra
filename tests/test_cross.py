@@ -5,6 +5,7 @@ import numpy as np
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_SKIP = False
 except Exception as e:
     JAX_SKIP = True
@@ -16,7 +17,7 @@ import fgspectra.cross as fgc
 
 def test_float():
     ell = 5
-    nu = 150.
+    nu = 150.0
 
     constant = fgf.ConstantSED()
     power_law = fgp.PowerLaw()
@@ -46,7 +47,7 @@ def test_numpy():
     assert cl_spec.shape[2] == ell.shape[0]
 
 
-@pytest.mark.skipif(JAX_SKIP==True, reason="jax not installed")
+@pytest.mark.skipif(JAX_SKIP == True, reason="jax not installed")
 def test_jax():
     ell = jnp.arange(2, 5000)
     nu = jnp.linspace(90.0, 220.0, 100)

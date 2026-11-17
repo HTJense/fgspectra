@@ -5,6 +5,7 @@ import numpy as np
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_SKIP = False
 except Exception as e:
     JAX_SKIP = True
@@ -26,20 +27,19 @@ def test_numpy():
 
     assert isinstance(f_bp, float)
 
-    mu_bp = [90., 150., 220.]
+    mu_bp = [90.0, 150.0, 220.0]
     nus = [nu for _ in mu_bp]
-    bps = [np.exp(-0.5 * np.power((nu - mu) / 10., 2.))
-           for nu, mu in zip(nus, mu_bp)]
+    bps = [np.exp(-0.5 * np.power((nu - mu) / 10.0, 2.0)) for nu, mu in zip(nus, mu_bp)]
 
     f_bp = fg_bp(nus, bps)
     assert isinstance(f_bp, np.ndarray)
 
 
-@pytest.mark.skipif(JAX_SKIP==True, reason="jax not installed")
+@pytest.mark.skipif(JAX_SKIP == True, reason="jax not installed")
 def test_jax():
     nu = jnp.linspace(70.0, 250.0, 100)
     # Gaussian bandpass
-    bp = jnp.exp(-0.5 * np.power((nu - 150.) / 10., 2.))
+    bp = jnp.exp(-0.5 * np.power((nu - 150.0) / 10.0, 2.0))
     bp = bp / jnp.trapezoid(bp, nu)
 
     constant = fgf.ConstantSED()
@@ -50,10 +50,11 @@ def test_jax():
 
     assert isinstance(f_bp, jax.Array)
 
-    mu_bp = [90., 150., 220.]
+    mu_bp = [90.0, 150.0, 220.0]
     nus = [nu for _ in mu_bp]
-    bps = [jnp.exp(-0.5 * jnp.power((nu - mu) / 10., 2.))
-           for nu, mu in zip(nus, mu_bp)]
+    bps = [
+        jnp.exp(-0.5 * jnp.power((nu - mu) / 10.0, 2.0)) for nu, mu in zip(nus, mu_bp)
+    ]
 
     f_bp = fg_bp(nus, bps)
     assert isinstance(f_bp, jax.Array)

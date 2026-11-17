@@ -5,6 +5,7 @@ import numpy as np
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_SKIP = False
 except Exception as e:
     JAX_SKIP = True
@@ -20,33 +21,25 @@ def test_ksz_numpy():
 
     amp = np.linspace(0.5, 1.5, 10)
 
-    ksz = fgc.FactorizedCrossSpectrum(
-        fgf.ConstantSED(),
-        fgp.kSZ_bat()
-    )
+    ksz = fgc.FactorizedCrossSpectrum(fgf.ConstantSED(), fgp.kSZ_bat())
 
     ksz(nu, nu, ell, amp=1.0)
     ksz(nu, nu, ell, amp=amp)
 
 
-@pytest.mark.skipif(JAX_SKIP==True, reason="jax not installed")
+@pytest.mark.skipif(JAX_SKIP == True, reason="jax not installed")
 def test_ksz_jax():
     ell = jnp.arange(2, 5000)
     nu = jnp.linspace(90.0, 220.0, 25)
 
     amp = jnp.linspace(0.5, 1.5, 10)
 
-    ksz = fgc.FactorizedCrossSpectrum(
-        fgf.ConstantSED(),
-        fgp.kSZ_bat()
-    )
+    ksz = fgc.FactorizedCrossSpectrum(fgf.ConstantSED(), fgp.kSZ_bat())
 
     ksz(nu, nu, ell, amp=1.0)
     ksz(nu, nu, ell, amp=amp)
 
-    jax.vmap(
-        lambda amp: ksz(nu, nu, ell, amp=amp)
-    )(amp)
+    jax.vmap(lambda amp: ksz(nu, nu, ell, amp=amp))(amp)
 
 
 def test_tsz_numpy():
@@ -57,10 +50,7 @@ def test_tsz_numpy():
         "amp": np.linspace(0.5, 1.5, 10),
     }
 
-    tsz = fgc.FactorizedCrossSpectrum(
-        fgf.ThermalSZ(),
-        fgp.PowerLaw(alpha=1.0)
-    )
+    tsz = fgc.FactorizedCrossSpectrum(fgf.ThermalSZ(), fgp.PowerLaw(alpha=1.0))
 
     tsz(nu, nu, ell, amp=1.0)
     tsz(nu, nu, ell, amp=params["amp"])
@@ -79,8 +69,7 @@ def test_tsz_jax():
     }
 
     tsz = fgc.FactorizedCrossSpectrum(
-        fgf.ThermalSZ(),
-        fgp.PowerLaw(constants={"alpha": 1.0})
+        fgf.ThermalSZ(), fgp.PowerLaw(constants={"alpha": 1.0})
     )
 
     # Test float call
@@ -92,9 +81,7 @@ def test_tsz_jax():
     assert ac.shape == (n_vec, len(nu), len(nu), len(ell))
 
     # Test vmap
-    vc = jax.vmap(
-        lambda amp: tsz(nu, nu, ell, amp=amp)
-    )(params["amp"])
+    vc = jax.vmap(lambda amp: tsz(nu, nu, ell, amp=amp))(params["amp"])
     assert vc.shape == (n_vec, len(nu), len(nu), len(ell))
 
     # Test vector call
@@ -117,15 +104,9 @@ def test_cibp_numpy():
     ell = np.arange(2, 5000)
     nu = np.linspace(90.0, 220.0, 25)
 
-    params = {
-        "amp": np.linspace(0.5, 1.5, 10),
-        "beta": np.linspace(1.8, 2.2, 10)
-    }
+    params = {"amp": np.linspace(0.5, 1.5, 10), "beta": np.linspace(1.8, 2.2, 10)}
 
-    cibp = fgc.FactorizedCrossSpectrum(
-        fgf.CIB(),
-        fgp.Poisson(alpha=1.0)
-    )
+    cibp = fgc.FactorizedCrossSpectrum(fgf.CIB(), fgp.Poisson(alpha=1.0))
 
     cibp(nu, nu, ell, amp=1.0, beta=2.0, T=9.6)
     cibp(nu, nu, ell, amp=params["amp"], beta=params["beta"], T=9.6)
@@ -146,10 +127,7 @@ def test_cibp_jax():
         "alpha": 1.0 * jnp.ones(n_vec),
     }
 
-    cibp = fgc.FactorizedCrossSpectrum(
-        fgf.CIB(),
-        fgp.Poisson(constants={"alpha": 1.0})
-    )
+    cibp = fgc.FactorizedCrossSpectrum(fgf.CIB(), fgp.Poisson(constants={"alpha": 1.0}))
 
     # Test float call
     fc = cibp(nu, nu, ell, amp=1.0, beta=2.0, T=9.6)
@@ -160,9 +138,9 @@ def test_cibp_jax():
     assert ac.shape == (n_vec, len(nu), len(nu), len(ell))
 
     # Test vmap
-    vc = jax.vmap(
-        lambda amp, beta: cibp(nu, nu, ell, amp=amp, beta=beta, T=9.6)
-    )(params["amp"], params["beta"])
+    vc = jax.vmap(lambda amp, beta: cibp(nu, nu, ell, amp=amp, beta=beta, T=9.6))(
+        params["amp"], params["beta"]
+    )
     assert vc.shape == (n_vec, len(nu), len(nu), len(ell))
 
     # Test vector call
@@ -188,14 +166,10 @@ def test_dust_numpy():
     ell = np.arange(2, 5000)
     nu = np.linspace(90.0, 220.0, 25)
 
-    params = {
-        "amp": np.linspace(0.5, 1.5, 10),
-        "beta": np.linspace(1.3, 2.7, 10)
-    }
+    params = {"amp": np.linspace(0.5, 1.5, 10), "beta": np.linspace(1.3, 2.7, 10)}
 
     dust = fgc.FactorizedCrossSpectrum(
-        fgf.ModifiedBlackBody(T=19.6),
-        fgp.DustCl(alpha=-0.6)
+        fgf.ModifiedBlackBody(T=19.6), fgp.DustCl(alpha=-0.6)
     )
 
     assert dust.cl.ell_0 == 500
@@ -214,7 +188,7 @@ def test_dust_jax():
 
     dust = fgc.FactorizedCrossSpectrum(
         fgf.ModifiedBlackBody(constants={"T": 19.6}),
-        fgp.DustCl(constants={"alpha": -0.6})
+        fgp.DustCl(constants={"alpha": -0.6}),
     )
 
     assert dust.cl.ell_0 == 500
@@ -233,9 +207,9 @@ def test_dust_jax():
     assert ac.shape == (n_vec, len(nu), len(nu), len(ell))
 
     # Test vmap
-    vc = jax.vmap(
-        lambda amp, beta: dust(nu, nu, ell, amp=amp, beta=beta)
-    )(params["amp"], params["beta"])
+    vc = jax.vmap(lambda amp, beta: dust(nu, nu, ell, amp=amp, beta=beta))(
+        params["amp"], params["beta"]
+    )
     assert vc.shape == (n_vec, len(nu), len(nu), len(ell))
 
     # Test vector call

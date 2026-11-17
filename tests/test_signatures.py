@@ -6,7 +6,6 @@ import fgspectra.power as fgp
 import fgspectra.frequency as fgf
 import fgspectra.cross as fgc
 
-
 ell = np.arange(2, 5000)
 nu = np.linspace(80.0, 250.0, 100)
 

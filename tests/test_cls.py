@@ -5,6 +5,7 @@ import numpy as np
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_SKIP = False
 except Exception as e:
     JAX_SKIP = True
@@ -31,7 +32,7 @@ def test_numpy():
     assert isinstance(cl, np.ndarray)
 
 
-@pytest.mark.skipif(JAX_SKIP==True, reason="jax not installed")
+@pytest.mark.skipif(JAX_SKIP == True, reason="jax not installed")
 def test_jax():
     ell = jnp.arange(2, 5000)
 
