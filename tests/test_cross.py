@@ -62,3 +62,15 @@ def test_jax():
     assert cl_spec.shape[0] == nu.shape[0]
     assert cl_spec.shape[1] == nu.shape[0]
     assert cl_spec.shape[2] == ell.shape[0]
+
+
+def test_renames():
+    ell = jnp.arange(2, 5000)
+    nu = jnp.linspace(90.0, 220.0, 100)
+
+    sed = fgf.ConstantSED(name="sed")
+    cl = fgp.kSZ_bat(name="ksz")
+    cross = fgc.FactorizedCrossSpectrum(sed, cl)
+
+    assert "amp" not in cross.parameters, "Original parameter still present."
+    assert "amp_ksz" in cross.parameters, "Renamed parameter missing."

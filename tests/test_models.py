@@ -123,7 +123,7 @@ def test_cibp_jax():
     params = {
         "amp": jnp.linspace(0.5, 1.5, n_vec),
         "beta": jnp.linspace(1.8, 2.2, n_vec),
-        "T": 9.6 * jnp.ones(n_vec),
+        "temp": 9.6 * jnp.ones(n_vec),
         "alpha": 1.0 * jnp.ones(n_vec),
     }
 
@@ -151,7 +151,7 @@ def test_cibp_jax():
     params = {
         "amp": 1.0,
         "beta": 2.0,
-        "T": 9.6,
+        "temp": 9.6,
         "alpha": 1.0,
     }
     theta = jnp.array([params[p] for p in cibp.parameters])
@@ -187,7 +187,7 @@ def test_dust_jax():
     n_vec = 10
 
     dust = fgc.FactorizedCrossSpectrum(
-        fgf.ModifiedBlackBody(constants={"T": 19.6}),
+        fgf.ModifiedBlackBody(constants={"temp": 19.6}),
         fgp.DustPowerLaw(constants={"alpha": -0.6}),
     )
 
@@ -220,7 +220,7 @@ def test_dust_jax():
     params = {
         "amp": 1.0,
         "beta": 2.0,
-        "T": 19.6,
+        "temp": 19.6,
         "alpha": 1.0,
     }
     theta = jnp.array([params[p] for p in dust.parameters])
