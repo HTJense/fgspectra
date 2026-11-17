@@ -12,6 +12,7 @@ fgspectra.cross module
     :undoc-members:
     :show-inheritance:
 
+
 fgspectra.frequency module
 --------------------------
 
@@ -20,6 +21,16 @@ fgspectra.frequency module
     :undoc-members:
     :show-inheritance:
 
+
+fgspectra.bandpass module
+----------------------
+
+.. automodule:: fgspectra.bandpass
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
 fgspectra.model module
 ----------------------
 
@@ -27,6 +38,7 @@ fgspectra.model module
     :members:
     :undoc-members:
     :show-inheritance:
+
 
 fgspectra.power module
 ----------------------

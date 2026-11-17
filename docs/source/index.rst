@@ -12,6 +12,7 @@ Welcome to fgspectra's documentation!
 
    install
    examples
+   new_templates
    modules
 
 

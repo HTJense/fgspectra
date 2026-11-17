@@ -1,247 +1,246 @@
 from abc import ABC, abstractmethod
-import types
+from functools import cached_property
 import inspect
-import yaml
+
 import numpy as np
-from copy import deepcopy
+import yaml
+
+
+NAME_SEPARATOR = "_"
+
+# Global, package-wide defaults.
+global_defaults = {
+    "ell_0": 3000,
+    "nu_0": 150.,
+    "T_CMB": 2.72548,
+}
 
 
 class Model(ABC):
-    """Abstract class for model definition
+    _default_backend = np
+    local_parameters: list = []
+    template_defaults: dict = {}
+    n_axes: int = 1
 
-    A model is a class that has one purpose: evaluating the model. What
-    evaluation means is defined by the `eval` method that any child class has to
-    override.
+    def __init__(self, *, name=None, renames=None, constants=None, **defaults):
+        self.name = name
+        self.renames = dict(renames or {})
+        self.constants = dict(constants or {})
+        self.children = []
 
-    If the `eval` method of a hypothetical ``Child`` class calls the `eval`
-    method of other `Model`s, it is likely that ``Child`` has also to override
-    `set_defaults`, `defaults` and `_get_repr`
-    """
+        # Check that all given parameters are known to this code.
+        unknown = (set(self.renames) | set(self.constants)) - set(self.local_parameters)
+        if len(unknown) > 0:
+            raise ValueError(
+                f"{type(self).__name__}: unknown parameters: {unknown}. "
+                f"Recognized parameters: {self.local_parameters}"
+            )
 
-    def __init__(self, **kwargs):
-        """You can set defaults at construction time"""
-        self.set_defaults(**kwargs)
+        # Check if there is overlap between some provided parameters.
+        if len(overlap := set(defaults) & set(self.constants)
+                           & set(self.local_parameters)) > 0:
+            raise ValueError(
+                f"{type(self).__name__}: parameters: {overlap} given as both "
+                "default values and fixed values. Choose one!"
+            )
 
-    def set_defaults(self, **kwargs):
-        """Change the defaults of the evaluation
-
-        Call ``set_defaults`` with the same arguments (or a subset) of ``eval``
-        (or ``__call__``).
-        This will change the default value of those arguments in ``eval``. If
-        `kwargs` has keys that are not arguments of `eval`, these keys are
-        ignored.
-
-        Examples
-        --------
-
-        >>> class PrintABC(Model):
-        ...     def eval(self, a=1, b=2, c=3):
-        ...         print(a, b, c)
-        ...
-        >>> print_abc = PrintABC()
-        >>> print_abc.eval()
-        1 2 3
-        >>> print_ab10c = PrintABC()
-        >>> print_ab10c.set_defaults(b=10)
-        >>> print_ab10c.eval()  # The default of b has changed
-        1 10 3
-        >>> print_abc.eval()  # Without affecting other instances
-        1 2 3
-
-        """
-        # This is a dirty business, and has limitations. The most important
-        # known one is that it breaks with decorated eval
-        # To change the default values of the eval method
-        # we have to bind a new method to the instance
-        # (not the class, otherwise we change the defaults of all the instances)
-
-        if not kwargs:  # No default to be replaced
-            return
-
-        # Inspect the function signature.
-        func = self.eval.__func__
-        sig = inspect.signature(func)
-        parameters = []
-
-        # First get the default values from the function signature.
-        for name, param in sig.parameters.items():
-            if name in kwargs:
-                param = param.replace(default=kwargs[name])
-            parameters.append(param)
-
-        # Build the function type.
-        new_func = types.FunctionType(
-            func.__code__,
-            func.__globals__,
-            name=func.__name__,
-            argdefs=func.__defaults__,
-            closure=func.__closure__,
-        )
-
-        new_func.__kwdefaults__ = (
-            func.__kwdefaults__.copy() if func.__kwdefaults__ else None
-        )
-
-        # Assign default values to the function.
-        new_func.__defaults__ = tuple(
-            par.default
-            for par in parameters
-            if par.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
-            and par.default is not inspect.Parameter.empty
-        )
-
-        # Include keyword-only default values in the defaults.
-        for par in parameters:
-            if (
-                par.kind == inspect.Parameter.KEYWORD_ONLY
-                and par.default is not inspect.Parameter.empty
-            ):
-                if par.name in kwargs:
-                    new_func.__kwdefaults__[par.name] = par.default
-
-        # Bind the new method to the instance
-        self.eval = types.MethodType(new_func, self)
-
-    @property
-    def defaults(self):
-        """The current defaults
-
-        The current defaults as you would pass them to the eval method.
-
-        In particular, since all the arguments have to be keyword arguments, it
-        is a nested set of dictionaries with a key for each argument of the
-        `eval` methods in the model.
-
-        >>> model.eval() == model.eval(**model_child.defaults)
-        True
-
-        """
-        return {
-            name: par.default
-            for name, par in inspect.signature(self.eval).parameters.items()
+        self.defaults = {
+            **global_defaults,
+            **self.template_defaults,
+            **defaults
         }
 
-    def __call__(self, *args, **kwargs):
-        # __call__ can't be rebound, that's why we use eval
-        return self.eval(*args, **kwargs)
+        self.param_defaults = {
+            p: self.defaults.pop(p)
+            for p in list(self.defaults)
+            if p in self.local_parameters
+        }
+
+        # Remove constants from defaults.
+        for p in self.constants:
+            self.param_defaults.pop(p, None)
+
+        for param in self.defaults:
+            if hasattr(type(self), param):
+                raise ValueError(f"Parameter {param} is a reserved class-level"
+                                 " attribute. Please use a different name!")
+            setattr(self, param, self.defaults[param])
+
+    def backend(self, *inputs):
+        """Checks which backend should be used, supports both Numpy and JAX,
+        but could theoretically handle many array-like libraries.
+
+        Defaults to using numpy.
+        """
+        for x in inputs:
+            if type(x).__module__.startswith("jax"):
+                import jax.numpy as jnp
+                return jnp
+
+        for x in inputs:
+            if hasattr(x, "__array_namespace__"):
+                return x.__array_namespace__()
+
+        return self._default_backend
+
+    def get_params(self, lib, theta, params):
+        if theta is not None:
+            if params:
+                raise TypeError("Both theta and kwargs provided: choose one!")
+            theta = lib.asarray(theta)
+            if theta.shape[-1] != len(self.parameters):
+                raise ValueError(f"Expected {len(self.parameters)} "
+                                 f"parameters ({self.parameters}), but "
+                                 f"{theta.shape} were given.")
+            return {
+                par: theta[..., i]
+                for i, par in enumerate(self.parameters)
+            }
+
+        unknown = set(params) - set(self.parameters)
+        if len(unknown) > 0:
+            raise TypeError(f"Unknown parameters {unknown}.")
+        defaults = self.global_parameter_defaults
+        missing = [
+            p
+            for p in self.parameters
+            if p not in params and p not in defaults
+        ]
+        if len(missing) > 0:
+            raise TypeError(f"Missing parameters {missing}")
+        return {
+            p: (params[p] if p in params else defaults[p])
+            for p in self.parameters
+        }
+
+    @staticmethod
+    def expand_parameters(lib, params, n):
+        """Turns a parameter array into a dictionary with an extra `n`
+        new singleton axes added at the end.
+        """
+        out = {}
+        for p in params:
+            v = lib.asarray(params[p])
+            out[p] = lib.reshape(v, tuple(v.shape) + (1,) * n)
+        return out
+
+    @staticmethod
+    def expand_axes(lib, *axes):
+        """Helper function to expand a set of evaluation axes into a grid of
+        evaluation points.
+        Given a list of `axes`, e.g. `axes = (nu, ell)`, where `nu.shape = (n,)`
+        and `ell.shape = (m,)`, returns a list of the same axes but with
+        additional singleton axes, i.e. the result `nu.shape = (n,1)` and
+        `ell.shape = (1,m)`.
+        """
+        n = len(axes)
+        axes = [lib.asarray(ax) for ax in axes]
+        return [
+            lib.reshape(ax, tuple(ax.shape) + (1,) * (n - i - 1))
+            for i, ax in enumerate(axes)
+        ]
+
+    def global_name(self, local):
+        """Rename a parameter that this model can use to a name that the
+           top-level model should understand."""
+        if local in self.renames:
+            return self.renames[local]
+        elif self.name:
+            return local + NAME_SEPARATOR + self.name
+        return local
+
+    def local_name(self, params):
+        """Turn a dictionary of global parameters into a dictionary of
+        local parameters (with values).
+
+        For example, suppose we have a tSZxCIB cross-spectrum that is given
+        a set of parameters, say `amp, beta_cib, alpha_cib, alpha_tsz`,
+        where `amp` and `alpha_tsz` need to go to the tSZ template,
+        `alpha_cib` to the CIB template, and `beta_cib` to the CIB SED. Then,
+        if those four parameters are all given to each of the different
+        components, this function will sort out which parameters each
+        component needs and which ones it does not need.
+        """
+        out = dict(self.constants)
+        for p in self.local_parameters:
+            if p not in self.constants:
+                out[p] = params[self.global_name(p)]
+        return out
+
+    def __call__(self, axes, theta, params, lib):
+        if lib is None:
+            pars = list(axes) + list(params.values())
+            if theta is not None:
+                pars.extend(
+                    theta if isinstance(theta, (list, tuple)) else [theta]
+                )
+            lib = self.backend(*pars)
+
+        params = self.get_params(lib, theta, params)
+        params = self.expand_parameters(lib, params, self.n_axes)
+        axes = self.expand_axes(lib, *axes)
+        return self.evaluate(*axes, params=params, lib=lib)
+
+    def evaluate(self, *args, params, lib):
+        return self.eval(*args, lib=lib, **self.local_name(params))
 
     @abstractmethod
-    def eval(self, **kwargs):
-        """Evaluation of the model
-
-        Note
-        ----
-        The signature must contain
-
-        - only keyword arguments (except for ``self``)
-        - no variadic argument (*args, **kwargs)
-
-        and
-
-        - no decoration
-
-        """
-        pass
-
-    def _get_repr(self):
-        """Readable version of defaults
-
-        In particular, it is also a nested set of dictionaries with a key for
-        each argument of the `eval` methods in the model.
-
-        If `eval` calls the `eval` of other classes, you typically want to
-        call the _get_repr method of those classes and collect the result in
-        some meaningful dictionary
-        """
-        res = {}
-        for key, val in self.defaults.items():
-            res[key] = val.tolist() if isinstance(val, np.ndarray) else val
-        return {type(self).__name__: res}
-
-    def __repr__(self):
-        # Turns the nested set of dictionaries into a string to be printed
-        return yaml.dump(self._get_repr())
-
-    def _key_value_iteration(self, dict_list_tuple):
-        if isinstance(dict_list_tuple, dict):
-            return dict_list_tuple.items()
-        if isinstance(dict_list_tuple, (list, tuple)):
-            return enumerate(dict_list_tuple)
-        raise TypeError("Only dict, list or tuple are allowed")
-
-    def _update_path_nones(self):
-        self._path_nones = []
-
-        def search_for_none(kwargs, base=[]):
-            for key, val in self._key_value_iteration(kwargs):
-                if val is None:
-                    self._path_nones.append(base + [key])
-                else:
-                    try:
-                        search_for_none(val, base + [key])
-                    except TypeError:
-                        pass
-
-        search_for_none(self.defaults)
-
-    def prepare_for_arrays(self, template_kwargs):
-        """Prepare for using arrays
-
-        reference_kwargs are necessary to define the shape you expect for each
-        argument, which are necessary to convert from array to nested
-        dictionaries of arguments. They are required to have at least all the
-        arguments for which the default is None.
-        """
-        self._template_kwargs = deepcopy(template_kwargs)
-        self._update_path_nones()
-
-    def kwargs2array(self, kwargs):
-        """(Nested) dictionaries to float array"""
-        if not hasattr(self, "_path_nones"):
-            raise RuntimeError("You have to call prepare_for_arrays first")
-        res_list = []
-        for path in self._path_nones:
-            val = kwargs
-            for p in path:
-                val = val[p]
-            res_list.append(np.array(val).reshape(-1))
-
-        return np.concatenate(res_list)
-
-    def array2kwargs(self, x):
-        if not hasattr(self, "_path_nones"):
-            raise RuntimeError("You have to call prepare_for_arrays first")
-        for path in self._path_nones:
-            inner_path = path
-            inner_kwargs = self._template_kwargs
-            while len(inner_path) > 1:
-                inner_kwargs = inner_kwargs[inner_path[0]]
-                inner_path = inner_path[1:]
-
-            ref_val = inner_kwargs[inner_path[0]]
-            try:
-                # It's an array
-                inner_kwargs[inner_path[0]] = x[: ref_val.size].reshape(ref_val.shape)
-                x = x[ref_val.size :]
-            except AttributeError:
-                # It's a float
-                inner_kwargs[inner_path[0]] = x[0]
-                x = x[1:]
-        return self._template_kwargs
-
-    def eval_array(self, x):
-        return self.eval(**self.array2kwargs(x))
-
-    @property
-    @abstractmethod
-    def n(self):
-        """Function to identify the number of leading differentiable parameters
-        in this model's `eval()` function.
-        """
+    def eval(self, *args, lib, **params):
         ...
 
-    def amp(self, *theta):
-        """A function to extract the amplitude of this model at the pivot scale
-        given the parameter vector `theta`.
-        """
-        return 1.0
+    @cached_property
+    def global_parameter_defaults(self):
+        defaults = {}
+
+        def add_default(p, v):
+            if p in defaults and not np.array_equal(defaults[p], v):
+                raise ValueError("Conflicting defaults for shared parameter.")
+
+            defaults[p] = v
+
+        for c in self.children:
+            for p in (c_defaults := c.global_parameter_defaults):
+                add_default(p, c_defaults[p])
+
+        for p in self.param_defaults:
+            add_default(self.global_name(p), self.param_defaults[p])
+        for p in self.constants:
+            add_default(self.global_name(p), self.constants[p])
+
+        return defaults
+
+    def records(self):
+        recs = []
+        for p in self.local_parameters:
+            if p not in self.constants:
+                recs.append((self.global_name(p), p in self.renames, self))
+        for c in self.children:
+            recs.extend(c.records())
+        return recs
+
+    @cached_property
+    def free_parameters(self):
+        owners = {}
+        for p, explicit, owner in self.records():
+            prev = owners.get(p)
+            if prev is None:
+                owners[p] = (explicit, owner)
+            elif prev[1] is not owner and not (prev[0] and explicit):
+                raise ValueError(
+                    f"Parameter {p} is used by multiple components. You can "
+                    f"differentiate them through the `name=...` parameter, "
+                    f"or mark them as the same parameter with `renames=...`."
+                )
+        return list(owners)
+
+    @property
+    def parameters(self):
+        return self.free_parameters
+
+    @property
+    def n_params(self):
+        return len(self.free_parameters)
+
+    def __repr__(self):
+        return (f"{type(self).__name__}(name={self.name!r}, "
+                f"parameters={self.parameters}, defaults={self.defaults})")

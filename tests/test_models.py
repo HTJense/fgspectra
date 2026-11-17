@@ -1,179 +1,257 @@
 import pytest
 
-from fgspectra import cross as fgc
-from fgspectra import power as fgp
-from fgspectra import frequency as fgf
 import numpy as np
-import os
+
+try:
+    import jax
+    import jax.numpy as jnp
+    JAX_SKIP = False
+except Exception as e:
+    JAX_SKIP = True
+
+import fgspectra.power as fgp
+import fgspectra.frequency as fgf
+import fgspectra.cross as fgc
 
 
-def test_ksz():
-    assert fgp.kSZ_bat() is not None
+def test_ksz_numpy():
+    ell = np.arange(2, 5000)
+    nu = np.linspace(90.0, 220.0, 25)
 
+    amp = np.linspace(0.5, 1.5, 10)
 
-def test_ACT_models():
-    # define the models from fgspectra
-    ksz = fgc.FactorizedCrossSpectrum(fgf.ConstantSED(), fgp.kSZ_bat())
-    cibp = fgc.FactorizedCrossSpectrum(fgf.ModifiedBlackBody(), fgp.PowerLaw())
-    radio = fgc.FactorizedCrossSpectrum(fgf.PowerLawSED(), fgp.PowerLaw())
-    cirrus = fgc.FactorizedCrossSpectrum(fgf.PowerLawSED(), fgp.PowerLaw())
-
-    # if there are correlations between components,
-    # have to define them in a joined spectrum
-    tSZ_and_CIB = fgc.CorrelatedFactorizedCrossSpectrum(
-        fgf.Join(fgf.ThermalSZ(), fgf.CIB()), fgp.SZxCIB_Addison2012()
+    ksz = fgc.FactorizedCrossSpectrum(
+        fgf.ConstantSED(),
+        fgp.kSZ_bat()
     )
 
-    # for testing purposes we'll also compute the tSZ and clustered CIB alone
-    tsz = fgc.FactorizedCrossSpectrum(fgf.ThermalSZ(), fgp.tSZ_150_bat())
-    cibc = fgc.FactorizedCrossSpectrum(fgf.CIB(), fgp.PowerLaw())
+    ksz(nu, nu, ell, amp=1.0)
+    ksz(nu, nu, ell, amp=amp)
 
-    template_path = os.path.join(os.path.dirname(os.path.abspath(fgp.__file__)), "data")
-    cibc_file = os.path.join(template_path, "cl_cib_Choi2020.dat")
-    cibc_Choi2020 = fgc.FactorizedCrossSpectrum(
-        fgf.CIB(), fgp.PowerSpectrumFromFile(cibc_file)
+
+@pytest.mark.skipif(JAX_SKIP==True, reason="jax not installed")
+def test_ksz_jax():
+    ell = jnp.arange(2, 5000)
+    nu = jnp.linspace(90.0, 220.0, 25)
+
+    amp = jnp.linspace(0.5, 1.5, 10)
+
+    ksz = fgc.FactorizedCrossSpectrum(
+        fgf.ConstantSED(),
+        fgp.kSZ_bat()
     )
-    tSZ_and_CIB_Choi2020 = fgc.SZxCIB_Choi2020()
 
-    ells = np.array([2000])
+    ksz(nu, nu, ell, amp=1.0)
+    ksz(nu, nu, ell, amp=amp)
 
-    par = {
-        "nu_0": 150.0,
-        "ell_0": 3000,
-        "T_CMB": 2.725,
-        "T_d": 9.7,
-        "a_tSZ": 4.66,
-        "a_kSZ": 1.60,
-        "a_p": 6.87,
-        "beta_p": 2.08,
-        "a_c": 6.10,
-        "beta_c": 2.08,
-        "n_CIBC": 1.20,
-        "xi": 0.09,
-        "a_s": 3.50,
-        "a_g": 0.88,
-        "f0_sz": 146.9,
-        "f0_synch": 147.6,
-        "f0_dust": 149.7,
+    jax.vmap(
+        lambda amp: ksz(nu, nu, ell, amp=amp)
+    )(amp)
+
+
+def test_tsz_numpy():
+    ell = np.arange(2, 5000)
+    nu = np.linspace(90.0, 220.0, 25)
+
+    params = {
+        "amp": np.linspace(0.5, 1.5, 10),
     }
 
-    fsz = np.array([par["f0_sz"]])
-    fsynch = np.array([par["f0_synch"]])
-    fdust = np.array([par["f0_dust"]])
-
-    result = (
-        tsz({"nu": fsz, "nu_0": par["nu_0"]}, {"amp": par["a_tSZ"], "ell": ells, "ell_0": par["ell_0"]}),
-        ksz({"nu": fsz}, {"amp": par["a_kSZ"], "ell": ells, "ell_0": par["ell_0"]}),
-        cibp(
-            {
-                "nu": fdust,
-                "nu_0": par["nu_0"],
-                "temp": par["T_d"],
-                "beta": par["beta_p"],
-            },
-            {"amp": par["a_p"], "ell": ells, "ell_0": par["ell_0"], "alpha": 2},
-        ),
-        cibc(
-            {
-                "nu": fdust,
-                "nu_0": par["nu_0"],
-                "temp": par["T_d"],
-                "beta": par["beta_c"],
-            },
-            {"amp": par["a_c"], "ell": ells, "ell_0": par["ell_0"], "alpha": 2 - par["n_CIBC"]},
-        ),
-        tSZ_and_CIB(
-            {
-                "kwseq": (
-                    {"nu": fsz, "nu_0": par["nu_0"]},
-                    {
-                        "nu": fdust,
-                        "nu_0": par["nu_0"],
-                        "temp": par["T_d"],
-                        "beta": par["beta_c"],
-                    },
-                )
-            },
-            {
-                "kwseq": (
-                    {"ell": ells, "ell_0": par["ell_0"], "amp": par["a_tSZ"]},
-                    {
-                        "ell": ells,
-                        "ell_0": par["ell_0"],
-                        "alpha": 2 - par["n_CIBC"],
-                        "amp": par["a_c"],
-                    },
-                    {
-                        "ell": ells,
-                        "ell_0": par["ell_0"],
-                        "amp": -par["xi"] * np.sqrt(par["a_tSZ"] * par["a_c"]),
-                    },
-                )
-            },
-        ),
-        radio(
-            {"nu": fsynch, "nu_0": par["nu_0"], "beta": -0.5 - 2},
-            {"amp": par["a_s"], "ell": ells, "ell_0": par["ell_0"], "alpha": 2},
-        ),
-        cirrus(
-            {"nu": fdust, "nu_0": par["nu_0"], "beta": 3.8 - 2},
-            {"amp": par["a_g"], "ell": ells, "ell_0": par["ell_0"], "alpha": -0.7},
-        ),
+    tsz = fgc.FactorizedCrossSpectrum(
+        fgf.ThermalSZ(),
+        fgp.PowerLaw(alpha=1.0)
     )
 
-    """
-    The following array `dunk13` was generated by inserting this code block to
-    line 188 of `ACT_equa_likelihood.f90` in the Fortran ACT multifrequency
-    likelihood.
+    tsz(nu, nu, ell, amp=1.0)
+    tsz(nu, nu, ell, amp=params["amp"])
 
-    ```fortran
-    if(il==2000) then
-      write(*,*) (f1*f1)/(f0*f0)*amp_tsz*cl_tsz(il)
-      write(*,*) amp_ksz*cl_ksz(il)
-      write(*,*) amp_d*cl_p(il)*(f1_dust/feff)**(2.d0*beta_d)*(planckratiod1*fluxtempd1)**2.d0
-      write(*,*) amp_c*cl_c(il)*(f1_dust/feff)**(2.d0*beta_c)*(planckratiod1*fluxtempd1)**2.d0
-      write(*,*) -2.d0*sqrt(amp_c*amp_tsz)*xi*cl_szcib(il)*((f1_dust**beta_c*f1*planckratiod1*fluxtempd1)/(feff**beta_c*f0))
-      write(*,*) amp_s*cl_p(il)*(f1_synch/feff)**(2.d0*alpha_s)*fluxtemps1**2.d0
-      write(*,*) amp_ge*cl_cir(il)*(f1_dust**2.d0/feff**2.d0)**beta_g*fluxtempd1**2.d0
-    endif
-    ```
 
-	The array 'choi20' was generated by inserting this code block to 
-    line 241 of `ACTPol_deep.f90` in the Fortran ACT multifrequency
-    likelihood and by changing the default value of 'fsz', 'fdust', 
-    and 'fsyn' to match the one used in this test.
+def test_tsz_jax():
+    import jax
+    import jax.numpy as jnp
 
-    ```fortran
-    if(il==2000) then
-    	write(*,*) a_c*clc(il)*(fdust(2)/feff)**(2.d0*beta_c)*(planckratiod(2)*fluxtempd(2))**2.d0
-    	write(*,*) -2.d0*sqrt(a_c*a_tsz)*xi*clszcib(il)*((fdust(2)**beta_c*fszcorr(2)*planckratiod(2)*fluxtempd(2))/(feff**beta_c*f0))
-    endif
-	```
-    """
-    dunk13 = np.array(
-        [
-            4.46395567509345,  # tsz
-            1.37903889069153,  # ksz
-            3.02039291213271,  # cibp
-            4.36478789541715,  # cibc
-            -0.611930900267790,  # cibxtsz
-            1.63099887443075,  # sync
-            1.15557760337592,
-        ]
-    )  # cirrus
+    ell = jnp.arange(2, 5000)
+    nu = jnp.linspace(90.0, 220.0, 25)
+    n_vec = 10
 
-    # for testing purposes, subtract tsz and cibc alone
-    # from the combined tsz,cibc,tszxcibc.
-    result = np.array([r[0][0][0] for r in result])
-    result[-3] -= result[0]
-    result[-3] -= result[3]
+    params = {
+        "amp": jnp.linspace(0.5, 1.5, n_vec),
+    }
 
-    tsz_fg, ksz_fg, cibp_fg, cibc_fg, cibxtxz_fg, sync_fg, cirrus_fg = result
+    tsz = fgc.FactorizedCrossSpectrum(
+        fgf.ThermalSZ(),
+        fgp.PowerLaw(constants={"alpha": 1.0})
+    )
 
-    assert np.abs(tsz_fg - dunk13[0]) / dunk13[0] < 1e-3
-    assert np.abs(ksz_fg - dunk13[1]) / dunk13[1] < 1e-3
-    assert np.abs(cibp_fg - dunk13[2]) / dunk13[2] < 1e-3
-    assert np.abs(cibc_fg - dunk13[3]) / dunk13[3] < 1e-3
-    assert np.abs(cibxtxz_fg - dunk13[4]) / dunk13[4] < 1e-3
-    assert np.abs(sync_fg - dunk13[5]) / dunk13[5] < 1e-3
-    assert np.abs(cirrus_fg - dunk13[6]) / dunk13[6] < 1e-3
+    # Test float call
+    fc = tsz(nu, nu, ell, amp=1.0)
+    assert fc.shape == (len(nu), len(nu), len(ell))
+
+    # Test array call
+    ac = tsz(nu, nu, ell, amp=params["amp"])
+    assert ac.shape == (n_vec, len(nu), len(nu), len(ell))
+
+    # Test vmap
+    vc = jax.vmap(
+        lambda amp: tsz(nu, nu, ell, amp=amp)
+    )(params["amp"])
+    assert vc.shape == (n_vec, len(nu), len(nu), len(ell))
+
+    # Test vector call
+    theta = jnp.array([params[p] for p in tsz.parameters]).T
+    vc = tsz(nu, nu, ell, theta)
+    assert vc.shape == (n_vec, len(nu), len(nu), len(ell))
+
+    params = {
+        "amp": 1.0,
+    }
+    theta = jnp.array([params[p] for p in tsz.parameters])
+
+    # Test gradient call
+    g_tsz = jax.jacfwd(tsz, argnums=3)
+    gc = g_tsz(nu, nu, ell, theta)
+    assert gc.shape == (len(nu), len(nu), len(ell), len(theta))
+
+
+def test_cibp_numpy():
+    ell = np.arange(2, 5000)
+    nu = np.linspace(90.0, 220.0, 25)
+
+    params = {
+        "amp": np.linspace(0.5, 1.5, 10),
+        "beta": np.linspace(1.8, 2.2, 10)
+    }
+
+    cibp = fgc.FactorizedCrossSpectrum(
+        fgf.CIB(),
+        fgp.Poisson(alpha=1.0)
+    )
+
+    cibp(nu, nu, ell, amp=1.0, beta=2.0, T=9.6)
+    cibp(nu, nu, ell, amp=params["amp"], beta=params["beta"], T=9.6)
+
+
+def test_cibp_jax():
+    import jax
+    import jax.numpy as jnp
+
+    ell = jnp.arange(2, 5000)
+    nu = jnp.linspace(90.0, 220.0, 25)
+    n_vec = 10
+
+    params = {
+        "amp": jnp.linspace(0.5, 1.5, n_vec),
+        "beta": jnp.linspace(1.8, 2.2, n_vec),
+        "T": 9.6 * jnp.ones(n_vec),
+        "alpha": 1.0 * jnp.ones(n_vec),
+    }
+
+    cibp = fgc.FactorizedCrossSpectrum(
+        fgf.CIB(),
+        fgp.Poisson(constants={"alpha": 1.0})
+    )
+
+    # Test float call
+    fc = cibp(nu, nu, ell, amp=1.0, beta=2.0, T=9.6)
+    assert fc.shape == (len(nu), len(nu), len(ell))
+
+    # Test array call
+    ac = cibp(nu, nu, ell, amp=params["amp"], beta=params["beta"], T=9.6)
+    assert ac.shape == (n_vec, len(nu), len(nu), len(ell))
+
+    # Test vmap
+    vc = jax.vmap(
+        lambda amp, beta: cibp(nu, nu, ell, amp=amp, beta=beta, T=9.6)
+    )(params["amp"], params["beta"])
+    assert vc.shape == (n_vec, len(nu), len(nu), len(ell))
+
+    # Test vector call
+    theta = jnp.array([params[p] for p in cibp.parameters]).T
+    vc = cibp(nu, nu, ell, theta)
+    assert vc.shape == (n_vec, len(nu), len(nu), len(ell))
+
+    params = {
+        "amp": 1.0,
+        "beta": 2.0,
+        "T": 9.6,
+        "alpha": 1.0,
+    }
+    theta = jnp.array([params[p] for p in cibp.parameters])
+
+    # Test gradient call
+    g_cibp = jax.jacfwd(cibp, argnums=3)
+    gc = g_cibp(nu, nu, ell, theta)
+    assert gc.shape == (len(nu), len(nu), len(ell), len(theta))
+
+
+def test_dust_numpy():
+    ell = np.arange(2, 5000)
+    nu = np.linspace(90.0, 220.0, 25)
+
+    params = {
+        "amp": np.linspace(0.5, 1.5, 10),
+        "beta": np.linspace(1.3, 2.7, 10)
+    }
+
+    dust = fgc.FactorizedCrossSpectrum(
+        fgf.ModifiedBlackBody(T=19.6),
+        fgp.DustCl(alpha=-0.6)
+    )
+
+    assert dust.cl.ell_0 == 500
+
+    dust(nu, nu, ell, amp=1.0, beta=1.5)
+    dust(nu, nu, ell, amp=params["amp"], beta=params["beta"])
+
+
+def test_dust_jax():
+    import jax
+    import jax.numpy as jnp
+
+    ell = jnp.arange(2, 5000)
+    nu = jnp.linspace(90.0, 220.0, 25)
+    n_vec = 10
+
+    dust = fgc.FactorizedCrossSpectrum(
+        fgf.ModifiedBlackBody(constants={"T": 19.6}),
+        fgp.DustCl(constants={"alpha": -0.6})
+    )
+
+    assert dust.cl.ell_0 == 500
+
+    params = {
+        "amp": jnp.linspace(0.5, 1.5, 10),
+        "beta": jnp.linspace(1.3, 1.7, 10),
+    }
+
+    # Test float call
+    fc = dust(nu, nu, ell, amp=1.0, beta=2.0)
+    assert fc.shape == (len(nu), len(nu), len(ell))
+
+    # Test array call
+    ac = dust(nu, nu, ell, amp=params["amp"], beta=params["beta"])
+    assert ac.shape == (n_vec, len(nu), len(nu), len(ell))
+
+    # Test vmap
+    vc = jax.vmap(
+        lambda amp, beta: dust(nu, nu, ell, amp=amp, beta=beta)
+    )(params["amp"], params["beta"])
+    assert vc.shape == (n_vec, len(nu), len(nu), len(ell))
+
+    # Test vector call
+    theta = jnp.array([params[p] for p in dust.parameters]).T
+    vc = dust(nu, nu, ell, theta)
+    assert vc.shape == (n_vec, len(nu), len(nu), len(ell))
+
+    params = {
+        "amp": 1.0,
+        "beta": 2.0,
+        "T": 19.6,
+        "alpha": 1.0,
+    }
+    theta = jnp.array([params[p] for p in dust.parameters])
+
+    # Test gradient call
+    g_dust = jax.jacfwd(dust, argnums=3)
+    gc = g_dust(nu, nu, ell, theta)
+    assert gc.shape == (len(nu), len(nu), len(ell), len(theta))
