@@ -5,7 +5,6 @@ from scipy import constants
 
 from .model import Model
 
-
 H_OVER_K = constants.h * 1e9 / constants.k
 
 
@@ -30,8 +29,7 @@ def _rj2cmb(nu, lib, T_CMB):
 
 class SED(Model):
     @abstractmethod
-    def eval(self, nu, /, *, lib, **params):
-        ...
+    def eval(self, nu, /, *, lib, **params): ...
 
     def __call__(self, nu, theta=None, /, *, lib=None, **params):
         return super().__call__((nu,), theta, params, lib)
@@ -53,8 +51,7 @@ class PowerLawSED(SED):
         return rj * (_rj2cmb(nu, lib, self.T_CMB) / _rj2cmb(self.nu_0, lib, self.T_CMB))
 
 
-class Synchrotron(PowerLawSED):
-    ...
+class Synchrotron(PowerLawSED): ...
 
 
 class ModifiedBlackBody(SED):
@@ -64,12 +61,17 @@ class ModifiedBlackBody(SED):
     def eval(self, nu, /, *, lib, beta, T):
         x = H_OVER_K * nu / T
         x_0 = H_OVER_K * self.nu_0 / T
-        res = (nu / self.nu_0) ** (beta - self.beta_0 + 1.) * lib.expm1(x_0) / lib.expm1(x)
-        return res * (_rj2cmb(nu, lib, self.T_CMB) / _rj2cmb(self.nu_0, lib, self.T_CMB))
+        res = (
+            (nu / self.nu_0) ** (beta - self.beta_0 + 1.0)
+            * lib.expm1(x_0)
+            / lib.expm1(x)
+        )
+        return res * (
+            _rj2cmb(nu, lib, self.T_CMB) / _rj2cmb(self.nu_0, lib, self.T_CMB)
+        )
 
 
-class CIB(ModifiedBlackBody):
-    ...
+class CIB(ModifiedBlackBody): ...
 
 
 class ThermalSZ(SED):
@@ -88,6 +90,6 @@ class FreeFree(SED):
     def eval(self, nu, /, *, lib, EM, Te):
         Teff = (Te / 1e3) ** 1.5
         nu_ff = 255.33e9 * Teff
-        g_ff = 1. + lib.log(1. + (nu_ff / nu) ** (math.sqrt(3.) / math.pi))
+        g_ff = 1.0 + lib.log(1.0 + (nu_ff / nu) ** (math.sqrt(3.0) / math.pi))
         # TODO: Need to check the units on this.
         return EM * g_ff

@@ -31,6 +31,7 @@ class Bandpass(Model):
 
         cl = cross_spectrum((nu1, bp1), (nu2, bp2), ell)
     """
+
     def __init__(self, sed, **kwargs):
         super().__init__(**kwargs)
         self.sed = sed
@@ -41,8 +42,9 @@ class Bandpass(Model):
         nus = [nus] if is_single else list(nus)
         bps = [bps] if is_single else list(bps)
         if len(nus) != len(bps):
-            raise ValueError(f"Number of frequency arrays must equal the "
-                             "number of bandpasses!")
+            raise ValueError(
+                f"Number of frequency arrays must equal the " "number of bandpasses!"
+            )
 
         if lib is None:
             pars = [*nus, *bps, *params.values()]
@@ -52,8 +54,10 @@ class Bandpass(Model):
 
         params = self.get_params(lib, theta, params)
         params = self._expand_params(lib, params, self.n_axes)
-        out = [self.eval(lib.asarray(nu), lib.asarray(bp), lib=lib, **params)
-               for nu, bp in zip(nus, bps)]
+        out = [
+            self.eval(lib.asarray(nu), lib.asarray(bp), lib=lib, **params)
+            for nu, bp in zip(nus, bps)
+        ]
 
         if is_single:
             return out[0]

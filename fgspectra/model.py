@@ -5,13 +5,12 @@ import inspect
 import numpy as np
 import yaml
 
-
 NAME_SEPARATOR = "_"
 
 # Global, package-wide defaults.
 global_defaults = {
     "ell_0": 3000,
-    "nu_0": 150.,
+    "nu_0": 150.0,
     "T_CMB": 2.72548,
 }
 
@@ -37,18 +36,20 @@ class Model(ABC):
             )
 
         # Check if there is overlap between some provided parameters.
-        if len(overlap := set(defaults) & set(self.constants)
-                           & set(self.local_parameters)) > 0:
+        if (
+            len(
+                overlap := set(defaults)
+                & set(self.constants)
+                & set(self.local_parameters)
+            )
+            > 0
+        ):
             raise ValueError(
                 f"{type(self).__name__}: parameters: {overlap} given as both "
                 "default values and fixed values. Choose one!"
             )
 
-        self.defaults = {
-            **global_defaults,
-            **self.template_defaults,
-            **defaults
-        }
+        self.defaults = {**global_defaults, **self.template_defaults, **defaults}
 
         self.param_defaults = {
             p: self.defaults.pop(p)
@@ -62,8 +63,10 @@ class Model(ABC):
 
         for param in self.defaults:
             if hasattr(type(self), param):
-                raise ValueError(f"Parameter {param} is a reserved class-level"
-                                 " attribute. Please use a different name!")
+                raise ValueError(
+                    f"Parameter {param} is a reserved class-level"
+                    " attribute. Please use a different name!"
+                )
             setattr(self, param, self.defaults[param])
 
     def backend(self, *inputs):
@@ -75,6 +78,7 @@ class Model(ABC):
         for x in inputs:
             if type(x).__module__.startswith("jax"):
                 import jax.numpy as jnp
+
                 return jnp
 
         for x in inputs:
@@ -89,29 +93,21 @@ class Model(ABC):
                 raise TypeError("Both theta and kwargs provided: choose one!")
             theta = lib.asarray(theta)
             if theta.shape[-1] != len(self.parameters):
-                raise ValueError(f"Expected {len(self.parameters)} "
-                                 f"parameters ({self.parameters}), but "
-                                 f"{theta.shape} were given.")
-            return {
-                par: theta[..., i]
-                for i, par in enumerate(self.parameters)
-            }
+                raise ValueError(
+                    f"Expected {len(self.parameters)} "
+                    f"parameters ({self.parameters}), but "
+                    f"{theta.shape} were given."
+                )
+            return {par: theta[..., i] for i, par in enumerate(self.parameters)}
 
         unknown = set(params) - set(self.parameters)
         if len(unknown) > 0:
             raise TypeError(f"Unknown parameters {unknown}.")
         defaults = self.global_parameter_defaults
-        missing = [
-            p
-            for p in self.parameters
-            if p not in params and p not in defaults
-        ]
+        missing = [p for p in self.parameters if p not in params and p not in defaults]
         if len(missing) > 0:
             raise TypeError(f"Missing parameters {missing}")
-        return {
-            p: (params[p] if p in params else defaults[p])
-            for p in self.parameters
-        }
+        return {p: (params[p] if p in params else defaults[p]) for p in self.parameters}
 
     @staticmethod
     def expand_parameters(lib, params, n):
@@ -142,7 +138,7 @@ class Model(ABC):
 
     def global_name(self, local):
         """Rename a parameter that this model can use to a name that the
-           top-level model should understand."""
+        top-level model should understand."""
         if local in self.renames:
             return self.renames[local]
         elif self.name:
@@ -171,9 +167,7 @@ class Model(ABC):
         if lib is None:
             pars = list(axes) + list(params.values())
             if theta is not None:
-                pars.extend(
-                    theta if isinstance(theta, (list, tuple)) else [theta]
-                )
+                pars.extend(theta if isinstance(theta, (list, tuple)) else [theta])
             lib = self.backend(*pars)
 
         params = self.get_params(lib, theta, params)
@@ -185,8 +179,7 @@ class Model(ABC):
         return self.eval(*args, lib=lib, **self.local_name(params))
 
     @abstractmethod
-    def eval(self, *args, lib, **params):
-        ...
+    def eval(self, *args, lib, **params): ...
 
     @cached_property
     def global_parameter_defaults(self):
@@ -242,5 +235,7 @@ class Model(ABC):
         return len(self.free_parameters)
 
     def __repr__(self):
-        return (f"{type(self).__name__}(name={self.name!r}, "
-                f"parameters={self.parameters}, defaults={self.defaults})")
+        return (
+            f"{type(self).__name__}(name={self.name!r}, "
+            f"parameters={self.parameters}, defaults={self.defaults})"
+        )

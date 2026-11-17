@@ -26,4 +26,3 @@ class FactorizedCrossSpectrum(CrossModel):
         cl = self.cl.evaluate(ell, lib=lib, params=params)
 
         return cl * f_nu1 * f_nu2
-
